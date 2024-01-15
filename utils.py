@@ -1,7 +1,7 @@
 import io
 import json
 import os
-
+import zipfile
 import pandas as pd
 from fastapi import Depends, HTTPException, status, File, UploadFile
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -79,3 +79,31 @@ async def upload_file(file: UploadFile = File(...)):
             pass
 
     return {"msg": "Unsupported file format, not csv/xlxs/json"}
+
+
+
+
+
+async def unzip_file(file: UploadFile = File(...)):
+    zip_file = file
+
+    with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+        result_data = []  
+
+        for file_name in zip_ref.namelist():
+            contents = zip_ref.read(file_name)
+
+            if file_name.lower().endswith(".csv"):
+                df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+                df = df.where(pd.notna(df), None)
+                headers = df.columns.tolist()
+                result_data.append({"msg": f"CSV file '{file_name}' received", "data": df.to_dict(orient='records'), "headers": headers, "status_code": 200, "type": "csv"})
+
+            elif file_name.lower().endswith(".xlsx"):
+                df = pd.read_excel(io.BytesIO(contents))
+                df = df.where(pd.notna(df), None)
+                headers = df.columns.tolist()
+                json_data = df.to_json(orient='records', date_format='iso', default_handler=str)
+                result_data.append({"msg": f"XLSX file '{file_name}' received", "data": json.loads(json_data), "status_code": 200, "type": "xlsx", "headers": headers})
+
+        return result_data

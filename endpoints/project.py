@@ -15,6 +15,10 @@ from schemas import CreateUserSchema, UserBaseSchema
 from schemas.project import CreateProject
 from utils import hash_password, verify_password, upload_file
 import os
+import zipfile
+import pandas as pd
+import io
+import json
 
 router = APIRouter(
     prefix="",
@@ -29,8 +33,14 @@ mongo_url = os.getenv("MONGO_URL")
 def get_sam_collection():
     client = MongoClient("mongodb://localhost:27017")
     db = client["lead_compass"]
-    sam_collection = db["complete_sam"]
+    sam_collection = db["test_sam"]
     return sam_collection
+
+def get_deed_collection():
+    client = MongoClient("mongodb://localhost:27017")
+    db = client["lead_compass"]
+    deed_collection = db["test_deed"]
+    return deed_collection
 
 
 def get_project_collection():
@@ -39,11 +49,12 @@ def get_project_collection():
     project_collection = db["project"]
     return project_collection
 
-def get_mvp_groupby_collection():
+def get_flattened_collection():
     client = MongoClient("mongodb://localhost:27017")
     db = client["lead_compass"]
-    group_mvp_collection = db["group_mvp"]
-    return group_mvp_collection
+    project_collection = db["test_flattened_transactions"]
+    return project_collection
+
 
 # async def run_script(script_path):
 #     process = await asyncio.create_subprocess_exec("python", script_path)
@@ -62,21 +73,15 @@ def get_mvp_groupby_collection():
 #     tasks = [run_script(f"{script_directory}/{script_filename}") for script_filename in script_filenames]
 #     await asyncio.gather(*tasks)
 
-def run_scripts():
-    collection_project = get_project_collection()
+def run_scripts(id:str):
 
+    project_id = id
     cur_dir = os.getcwd()
-    script_directory = os.path.join(cur_dir, "managers")
+    script_directory = os.path.join(cur_dir, "scripts")
 
-    script_filenames = ["update_borrower_name_sam.py", "update_sam.py", "filter_sam.py",
-                        "flattened.py", "listing_more_than_one_borrower.py", "tags_for_company_borrowers.py",
-                        "mvp.py", "mvp_groupby.py"]
-
-    for script_filename in script_filenames:
-        script_path = f"{script_directory}/{script_filename}"
-        subprocess.run(["python", script_path])
-
-    # collection_project.update_one({"_id": id}, {"$set": {"status": "completed"}})
+    script_filename = "master_script.py"  
+    script_path = f"{script_directory}/{script_filename}"
+    subprocess.run(["python", script_path, "--project_id", project_id])
 
 
 @router.post('/project')
@@ -85,40 +90,46 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
     try:
 
         collection_sam = get_sam_collection()
+        collection_deed = get_deed_collection()
+        collection_flattened_transactions = get_flattened_collection()
         result_sam = []
         companies = []
-        if file:
-            response = await upload_file(file)
+        # if file:
+        #     response = await upload_file(file)
 
-            if response.get("status_code") == 200:
-                if response.get("type") == "json":
-                    companies = response.get('data', dict())
+        #     if response.get("status_code") == 200:
+        #         if response.get("type") == "json":
+        #             companies = response.get('data', dict())
 
-                elif response.get("type") == "csv":
-                    companies = response.get('data', [])
+        #         elif response.get("type") == "csv":
+        #             companies = response.get('data', [])
 
-                elif response.get("type") == "xlsx":
-                    companies = response.get('data', [])
+        #         elif response.get("type") == "xlsx":
+        #             companies = response.get('data', [])
 
-            if not companies:
-                return {"msg": "No Companies Provided in request"}
+        #     if not companies:
+        #         return {"msg": "No Companies Provided in request"}
 
-            result_sam = collection_sam.insert_many(companies)
+        #     result_sam = collection_sam.insert_many(companies)
 
-        else:
-            companies = load_json.company_data
-            result_sam = collection_sam.insert_many(companies)
+        # else:
+        #     companies = load_json.company_data
+        #     result_sam = collection_sam.insert_many(companies)
 
-        inserted_ids = result_sam.inserted_ids
+        # inserted_ids = result_sam.inserted_ids
+
+
+        
+
         collection_project = get_project_collection()
 
         new_project = {
             "_id": ObjectId(),
-            "project_id": collection_project.count_documents({}) + 1,
+            # "project_id": collection_project.count_documents({}) + 1,
             "user_email": user.get('email'),
             "total_mortgage_transaction": len(companies),
             "created_at": datetime.now(),
-            "status": "complete"
+            "status": "processing"
         }
 
         source = "blackknight"
@@ -130,35 +141,39 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
             new_project["project_name"] = f"blackknight_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
         result_project = collection_project.insert_one(new_project)
+        inserted_id = result_project.inserted_id
 
-        collection_sam.update_many({"_id": {"$in": inserted_ids}},
-                                   {"$set": {"project_id": new_project.get('project_id')}})
+        # collection_sam.update_many({"_id": {"$in": inserted_ids}},
+        #                            {"$set": {"ProjectId": new_project.get('project_id')}})
+        
+        collection_sam.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
+        collection_deed.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
 
-        run_scripts()
+        # run_scripts(str(inserted_id))
+        background_tasks.add_task(run_scripts, str(new_project.get('_id')))
+        # project_id = new_project["project_id"]
 
-        project_id = new_project["project_id"]
+        # last_10_year_transactions_mortgage = collection_flattened_transactions.count_documents({
+        #     "LC_TransactionDateValidForCompany": "Y",
+        #     "ProjectId": project_id
+        # })
 
-        last_10_year_transactions_mortgage = collection_sam.count_documents({
-            "time_tag": "N",
-            "project_id": project_id
-        })
-
-        residential_properties_transactions_mortgage = collection_sam.count_documents({
-            "time_tag": "N",
-            "residential_tag": 1,
-            "project_id": project_id
-        })
-        collection_project.update_one(
-            {"_id": ObjectId(new_project["_id"])},
-            {
-                "$set": {
-                    "last_10_year_transactions_mortgage": last_10_year_transactions_mortgage,
-                    "residential_properties_transactions_mortgage": residential_properties_transactions_mortgage
-                }
-            }
-        )
-        new_project["last_10_year_transactions_mortgage"] = last_10_year_transactions_mortgage
-        new_project["residential_properties_transactions_mortgage"] = residential_properties_transactions_mortgage
+        # residential_properties_transactions_mortgage = collection_flattened_transactions.count_documents({
+        #     "LC_TransactionDateValidForCompany": "Y",
+        #     "LC_PropertyResidentialStatus": 1,
+        #     "ProjectId": project_id
+        # })
+        # collection_project.update_one(
+        #     {"_id": ObjectId(new_project["_id"])},
+        #     {
+        #         "$set": {
+        #             "last_10_year_transactions_mortgage": last_10_year_transactions_mortgage,
+        #             "residential_properties_transactions_mortgage": residential_properties_transactions_mortgage
+        #         }
+        #     }
+        # )
+        # new_project["last_10_year_transactions_mortgage"] = last_10_year_transactions_mortgage
+        # new_project["residential_properties_transactions_mortgage"] = residential_properties_transactions_mortgage
         new_project["_id"] = str(new_project["_id"])
         return {"msg": "project added successfully",
                 "new_project": new_project}
@@ -223,3 +238,48 @@ async def get_user_by_id(id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+@router.post('/file/unzip')
+async def unzip_file(file: UploadFile = File(...)):
+    zip_file = file.file  # Access the underlying SpooledTemporaryFile
+
+    result_data = []  # To store (file_name, content) pairs from all files in the zip archive
+
+    # Open the zip file
+    # with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+    #     for file_info in zip_ref.infolist():
+    #         if not file_info.is_dir():
+    #             file_name = file_info.filename
+    #             content = zip_ref.read(file_name)
+    #             result_data.append((file_name, content))
+
+    # return result_data
+
+    with zipfile.ZipFile(zip_file,"r") as zf:
+        zf.extractall()
+
+    return zf
+        #     with zip_ref.open(file_info) as file_obj:
+        #         contents = file_obj.read()
+
+        #         if file_info.filename.lower().endswith(".csv"):
+        #             try:
+        #                 df = pd.read_csv(io.StringIO(contents.decode("latin-1")))
+        #                 df = df.where(pd.notna(df), None)
+        #                 headers = df.columns.tolist()
+        #                 result_data.append({"msg": f"CSV file '{file_info.filename}' received", "data": df.to_dict(orient='records'), "headers": headers, "status_code": 200, "type": "csv"})
+        #             except ValueError:
+        #                 result_data.append({"msg": f"CSV file '{file_info.filename}' contains out-of-range float values", "status_code": 400, "type": "csv"})
+
+        #         elif file_info.filename.lower().endswith(".xlsx"):
+        #             df = pd.read_excel(io.BytesIO(contents))
+        #             df = df.where(pd.notna(df), None)
+        #             headers = df.columns.tolist()
+        #             json_data = df.to_json(orient='records', date_format='iso', default_handler=str)
+        #             result_data.append({"msg": f"XLSX file '{file_info.filename}' received", "data": json.loads(json_data), "status_code": 200, "type": "xlsx", "headers": headers})
+
+        # return result_data
