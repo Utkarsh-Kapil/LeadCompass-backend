@@ -48,24 +48,7 @@ async def create_user(user: CreateUserSchema):
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         }
-        # user.email = user.email.lower()
-        # # user.password = hash_password(user.password)
-        # user.created_at = datetime.utcnow()
-        # user.updated_at = datetime.utcnow()
-
-        # new_user = user.model_dump()
-
-        # if hasattr(new_user, '__dict__'):
-        #     new_user_vars = vars(new_user)
-        # else:
-        #     new_user_vars = new_user
-        #
-        # new_user_vars["_id"] = str(ObjectId())
-        # new_user["id"] = User.count_documents({}) + 1
-        print(new_user)
         result_user = user_collection.insert_one(new_user)
-        print(result_user)
-
         return {"msg": "User registered successfully", "user_id": str(result_user.inserted_id)}
 
     except HTTPException as http_exception:

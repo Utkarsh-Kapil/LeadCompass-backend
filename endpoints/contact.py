@@ -32,23 +32,11 @@ async def create_contact(contact: ContactSchema):
 
         if existing_contact:
             raise HTTPException(status_code=400, detail="Contact already exists for id: {}".format(contact.id))
-        
 
-        contact_obj = {
-            "first_name": contact.first_name,
-            "last_name": contact.last_name,
-            "email": contact.email,
-            "primary_contact": contact.primary_contact,
-            "secondary_contact": contact.secondary_contact,
-            "linkedIn": contact.linkedIn,
-            "contact_type": contact.contact_type,
-            "company_id": contact.company_id,
-            "created_at": datetime.now(),
-        }
+        contact.created_at = datetime.now()
+        new_contact = ContactSchema(**contact.model_dump())
 
-        contact_obj = ContactSchema(**contact_obj)
-
-        response = collection_contact.insert_one(contact_obj.model_dump(by_alias=True, exclude=["id"]))
+        response = collection_contact.insert_one(new_contact.model_dump(by_alias=True, exclude=["id"]))
        
         new_contact = collection_contact.find_one({"_id": response.inserted_id})
 

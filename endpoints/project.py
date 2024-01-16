@@ -6,7 +6,6 @@ import subprocess
 from pymongo import MongoClient
 from pymongo.collection import Collection
 import asyncio
-
 from Oauth import get_current_user, create_access_token
 from config.db import get_collection
 from data import load_json
@@ -174,7 +173,6 @@ async def get_project_by_id(id: str):
         project = collection_project.find_one({"_id": ObjectId(id)})
 
         if project:
-            project["_id"] = str(project["_id"])
             return ProjectResponse(message= "Project retrieved successfully", result= project, total=1)
         else:
             raise HTTPException(status_code=404, detail="Project not found for id: {}".format(id))

@@ -1,13 +1,11 @@
 from pydantic import BaseModel, EmailStr, constr, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional,List, Union, Annotated
 from Enum import StatusEnum
+from pydantic.functional_validators import BeforeValidator
 
 
-class PyObjectId:
-    pass
-
-
+PyObjectId = Annotated[str, BeforeValidator(str)]
 class UserBaseSchema(BaseModel):
     # id: Optional[PyObjectId] = Field(alias="_id", default=None)
     name: constr(min_length=3) = ""
@@ -29,6 +27,14 @@ class CreateUserSchema(UserBaseSchema):
     role: str = 'user'
     created_at: datetime = None
     updated_at: datetime = None
+
+
+
+class UserResponse(BaseModel):
+    message: str
+    total: Optional[int] = None
+    result: Union[UserBaseSchema, List[UserBaseSchema]]
+
 
 
 class LoginUserSchema(BaseModel):
