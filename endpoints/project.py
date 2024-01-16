@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from bson import ObjectId
 from dotenv import load_dotenv, find_dotenv
 from fastapi import APIRouter, HTTPException, Depends, Body, Query, BackgroundTasks, UploadFile, File
@@ -55,24 +54,6 @@ def get_flattened_collection():
     project_collection = db["test_flattened_transactions"]
     return project_collection
 
-
-# async def run_script(script_path):
-#     process = await asyncio.create_subprocess_exec("python", script_path)
-#     await process.communicate()
-#
-# async def run_scripts():
-#     collection_project = get_project_collection()
-#
-#     cur_dir = os.getcwd()
-#     script_directory = os.path.join(cur_dir, "managers")
-#
-#     script_filenames = ["update_borrower_name_sam.py", "update_sam.py", "filter_sam.py",
-#                         "flattened.py", "listing_more_than_one_borrower.py", "tags_for_company_borrowers.py",
-#                         "mvp.py"]
-#
-#     tasks = [run_script(f"{script_directory}/{script_filename}") for script_filename in script_filenames]
-#     await asyncio.gather(*tasks)
-
 def run_scripts(id:str):
 
     project_id = id
@@ -125,7 +106,6 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
         new_project = {
             "_id": ObjectId(),
-            # "project_id": collection_project.count_documents({}) + 1,
             "user_email": user.get('email'),
             "total_mortgage_transaction": len(companies),
             "created_at": datetime.now(),
@@ -149,31 +129,7 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         collection_sam.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
         collection_deed.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
 
-        # run_scripts(str(inserted_id))
         background_tasks.add_task(run_scripts, str(new_project.get('_id')))
-        # project_id = new_project["project_id"]
-
-        # last_10_year_transactions_mortgage = collection_flattened_transactions.count_documents({
-        #     "LC_TransactionDateValidForCompany": "Y",
-        #     "ProjectId": project_id
-        # })
-
-        # residential_properties_transactions_mortgage = collection_flattened_transactions.count_documents({
-        #     "LC_TransactionDateValidForCompany": "Y",
-        #     "LC_PropertyResidentialStatus": 1,
-        #     "ProjectId": project_id
-        # })
-        # collection_project.update_one(
-        #     {"_id": ObjectId(new_project["_id"])},
-        #     {
-        #         "$set": {
-        #             "last_10_year_transactions_mortgage": last_10_year_transactions_mortgage,
-        #             "residential_properties_transactions_mortgage": residential_properties_transactions_mortgage
-        #         }
-        #     }
-        # )
-        # new_project["last_10_year_transactions_mortgage"] = last_10_year_transactions_mortgage
-        # new_project["residential_properties_transactions_mortgage"] = residential_properties_transactions_mortgage
         new_project["_id"] = str(new_project["_id"])
         return {"msg": "project added successfully",
                 "new_project": new_project}

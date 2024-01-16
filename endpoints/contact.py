@@ -1,13 +1,8 @@
 from datetime import datetime
 from bson import ObjectId
 from dotenv import load_dotenv, find_dotenv
-from fastapi import APIRouter, HTTPException, Depends, Body, Query,status
+from fastapi import APIRouter, HTTPException, Query,status
 from pymongo import MongoClient
-from pymongo.collection import Collection
-from fastapi.encoders import jsonable_encoder
-from typing import Optional
-from Oauth import get_current_user
-from schemas import UserBaseSchema
 from schemas.contact import ContactSchema,ContactResponse
 import os
 import traceback
@@ -27,13 +22,6 @@ def get_contact_collection():
     db = client["lead_compass"]
     contact_collection = db["contact"]
     return contact_collection
-
-
-def get_project_collection():
-    client = MongoClient("mongodb://localhost:27017")
-    db = client["lead_compass"]
-    project_collection = db["project"]
-    return project_collection
 
 
 @router.post('/add', response_model=ContactResponse, response_model_by_alias=False, response_description="Contact added successfully", status_code=status.HTTP_201_CREATED)
