@@ -33,23 +33,18 @@ def get_current_time():
     return time.time()
 
 st = get_current_time()
-
-
-
+ 
 pipeline = [
     {
-        "$match": {
-            "ProjectId": project_id,
-        }
+        "$match": {"LC_Borrower":{"$ne":""},"ProjectId":project_id}
     },
-    {
+    {      
         "$group": {
             "_id": "$LC_Borrower",
             "LC_TotalLoanAmount": {"$sum": "$LC_PartialLoanAmount"},
             "LC_NumberOfLoans": {"$sum": 1},
             "FIPSCodeSet": {"$addToSet": "$FIPSCode"},
             "DPIDSet": {"$addToSet": "$DPID"},
-            "LC_BorrowerFullAddressSet": {"$addToSet": "$LC_BorrowerFullAddress"},
             "LC_LatestTransactionDate": {"$max": "$OriginalDateOfContract"},
             "LC_Transactions": {
                 "$push": {
@@ -59,82 +54,45 @@ pipeline = [
                     "DPID": "$DPID"
                 }
             },
-            "ProjectId": {"$first":"$ProjectId"}
+            "LC_BorrowerFullAddressSet": {"$addToSet": "$LC_BorrowerFullAddress"},
+            "LC_BorrowerFullAddressJsonSet":{
+                "$addToSet": {
+                    "BorrowerMailFullStreetAddress": "$BorrowerMailFullStreetAddress",
+                    "BorrowerMailUnitNumber": "$BorrowerMailUnitNumber",
+                    "BorrowerMailUnitType": "$BorrowerMailUnitType",
+                    "BorrowerMailZip4": "$BorrowerMailZip4",
+                    "BorrowerMailZipCode": "$BorrowerMailZipCode",
+                    "BorrowerMailCity": "$BorrowerMailCity",
+                    "BorrowerMailState": "$BorrowerMailState"
+                }
+            }
         }
     },
     {
         "$addFields": {
             "LC_TotalNumberOfPropertyTransactions": {"$size": "$DPIDSet"},
-        }
-    },
-    {
-        "$unwind": "$LC_Transactions"
-    },
-    {
-        "$group": {
-            "_id": {
-                "LC_Borrower": "$_id",
-                "DPID": "$LC_Transactions.DPID"
-            },
-            "LC_Transactions": {
-                "$push": {
-                    "FIPSCode": "$LC_Transactions.FIPSCode",
-                    "Source": "$LC_Transactions.Source",
-                    "TransactionId": "$LC_Transactions.TransactionId"
-                }
-            },
-            "LC_TotalLoanAmount": {"$first": "$LC_TotalLoanAmount"},
-            "LC_NumberOfLoans": {"$first": "$LC_NumberOfLoans"},
-            "FIPSCodeSet": {"$first": "$FIPSCodeSet"},
-            "LC_BorrowerFullAddressSet": {"$first": "$LC_BorrowerFullAddressSet"},
-            "LC_LatestTransactionDate": {"$first": "$LC_LatestTransactionDate"},
-            "LC_TotalNumberOfPropertyTransactions": {"$first": "$LC_TotalNumberOfPropertyTransactions"},
-            "ProjectId": {"$first":"$ProjectId"}
-        }
-    },
-    {
-        "$group": {
-            "_id": "$_id.LC_Borrower",
-            "LC_Borrower": {"$first": "$_id.LC_Borrower"},
-            "LC_TotalLoanAmount": {"$first": "$LC_TotalLoanAmount"},
-            "LC_NumberOfLoans": {"$first": "$LC_NumberOfLoans"},
-            "FIPSCodeSet": {"$first": "$FIPSCodeSet"},
-            "LC_BorrowerFullAddressSet": {"$first": "$LC_BorrowerFullAddressSet"},
-            "LC_LatestTransactionDate": {"$first": "$LC_LatestTransactionDate"},
-            "LC_TotalNumberOfPropertyTransactions": {"$first": "$LC_TotalNumberOfPropertyTransactions"},
-            "LC_Transactions": {
-                "$push": {
-                    "k": {"$toString": "$_id.DPID"},
-                    "v": "$LC_Transactions"
-                }
-            },
-            "ProjectId": {"$first":"$ProjectId"}
-        }
-    },
-    {
-        "$addFields": {
-            "LC_Transactions": {"$arrayToObject": "$LC_Transactions"}
+            "LC_Borrower": "$_id"
         }
     },
     {
         "$project": {
+            "_id": 0,
             "DPIDSet": 0
-        }
-    },
-    {
-        "$addFields": {
-            "_id": "$$REMOVE"
         }
     },
     {
         "$out": target_collection_name
     }
 ]
-
+ 
+ 
 source_collection.aggregate(pipeline)
-
+ 
+# source_collection.aggregate(pipeline, allowDiskUse=True)
+ 
 et = get_current_time()
-
+ 
 print(f"Time taken {et-st}")
-
+ 
+# Close the MongoDB connection
 client.close()
