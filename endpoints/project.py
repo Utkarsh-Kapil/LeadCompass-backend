@@ -1,7 +1,7 @@
 from datetime import datetime
 from bson import ObjectId
 from dotenv import load_dotenv, find_dotenv
-from fastapi import APIRouter, HTTPException, Depends, Body, Query, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Body, Query, BackgroundTasks, UploadFile, File, status
 import subprocess
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -11,7 +11,7 @@ from Oauth import get_current_user, create_access_token
 from config.db import get_collection
 from data import load_json
 from schemas import CreateUserSchema, UserBaseSchema
-from schemas.project import CreateProject
+from schemas.project import ProjectSchema,ProjectResponse
 from utils import hash_password, verify_password, upload_file
 import os
 import zipfile
@@ -48,12 +48,6 @@ def get_project_collection():
     project_collection = db["project"]
     return project_collection
 
-def get_flattened_collection():
-    client = MongoClient("mongodb://localhost:27017")
-    db = client["lead_compass"]
-    project_collection = db["test_flattened_transactions"]
-    return project_collection
-
 def run_scripts(id:str):
 
     project_id = id
@@ -65,14 +59,13 @@ def run_scripts(id:str):
     subprocess.run(["python", script_path, "--project_id", project_id])
 
 
-@router.post('/project')
+@router.post('/project', response_model=ProjectResponse, response_model_by_alias=False, response_description="Project added successfully", status_code=status.HTTP_201_CREATED)
 async def create_project(background_tasks: BackgroundTasks, file: UploadFile = File(None),
-                         user: UserBaseSchema = Depends(get_current_user)):
+                         user: UserBaseSchema = Depends(get_current_user), project: ProjectSchema = None):
     try:
 
         collection_sam = get_sam_collection()
         collection_deed = get_deed_collection()
-        collection_flattened_transactions = get_flattened_collection()
         result_sam = []
         companies = []
         # if file:
@@ -99,13 +92,9 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
         # inserted_ids = result_sam.inserted_ids
 
-
-        
-
         collection_project = get_project_collection()
-
         new_project = {
-            "_id": ObjectId(),
+            "id": ObjectId(),
             "user_email": user.get('email'),
             "total_mortgage_transaction": len(companies),
             "created_at": datetime.now(),
@@ -120,7 +109,10 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
             new_project["source"] = source
             new_project["project_name"] = f"blackknight_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-        result_project = collection_project.insert_one(new_project)
+
+        new_project = ProjectSchema(**new_project)
+
+        result_project = collection_project.insert_one(new_project.model_dump(by_alias=True, exclude=["id"]))
         inserted_id = result_project.inserted_id
 
         # collection_sam.update_many({"_id": {"$in": inserted_ids}},
@@ -129,10 +121,8 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         collection_sam.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
         collection_deed.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
 
-        background_tasks.add_task(run_scripts, str(new_project.get('_id')))
-        new_project["_id"] = str(new_project["_id"])
-        return {"msg": "project added successfully",
-                "new_project": new_project}
+        background_tasks.add_task(run_scripts, str(new_project.id))
+        return ProjectResponse(message = "project added successfully",result=new_project)
 
     except HTTPException as http_exception:
         raise http_exception
@@ -141,20 +131,23 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post('/project/all')
+@router.post('/project/all', response_model=ProjectResponse, response_model_by_alias=False, response_description="Projects fetched successfully", status_code=status.HTTP_200_OK)
 async def get_projects(
         payload: dict = Body(None, description="source"),
         page: int = Query(1, ge=1),
         page_size: int = Query(100, ge=1)):
     try:
+        if not payload:
+            source = 'all sources' 
+            sort_order = 'last entry'
+
+        else:
+            source = payload.get('sourceType','all sources') 
+            sort_order = payload.get('sortBy','last entry')
+
         collection_project = get_project_collection()
 
         filter_query = {}
-        source = payload.get('sourceType')
-        sort_order = payload.get('sortBy')
-
-        print(source)
-        print(sort_order)
 
         if source and str(source).lower() != "all sources":
             filter_query["source"] = str(source).lower()
@@ -163,13 +156,10 @@ async def get_projects(
         if sort_order and sort_order.lower() == "last entry":
             sort_direction = -1
 
-        projects = collection_project.find(filter_query, {'_id': 0}).sort("created_at", sort_direction).limit(
-            page_size).skip(
-            (page - 1) * page_size)
+        projects = collection_project.find(filter_query).sort("created_at", sort_direction).limit(page_size).skip((page - 1) * page_size)
 
         project_list = [project for project in projects]
-        return {"msg": "projects retrieved successfully", "projects": project_list,
-                "projects_total_count": len(project_list)}
+        return ProjectResponse(message= "projects retrieved successfully", result= project_list,total= len(project_list))
 
     except HTTPException as http_exception:
         raise http_exception
@@ -177,17 +167,17 @@ async def get_projects(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get('/project/{id}')
-async def get_user_by_id(id: str):
+@router.get('/project/{id}',response_model=ProjectResponse, response_model_by_alias=False, response_description="Project fetched successfully", status_code=status.HTTP_200_OK)
+async def get_project_by_id(id: str):
     try:
         collection_project = get_project_collection()
-        project = collection_project.find_one({"project_id": int(id)})
+        project = collection_project.find_one({"_id": ObjectId(id)})
 
         if project:
             project["_id"] = str(project["_id"])
-            return {"msg": "Project retrieved successfully", "project": project}
+            return ProjectResponse(message= "Project retrieved successfully", result= project, total=1)
         else:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=404, detail="Project not found for id: {}".format(id))
 
     except HTTPException as http_exception:
         raise http_exception
@@ -203,39 +193,48 @@ async def get_user_by_id(id: str):
 async def unzip_file(file: UploadFile = File(...)):
     zip_file = file.file  # Access the underlying SpooledTemporaryFile
 
-    result_data = []  # To store (file_name, content) pairs from all files in the zip archive
+    result_data = []  
 
-    # Open the zip file
-    # with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-    #     for file_info in zip_ref.infolist():
-    #         if not file_info.is_dir():
-    #             file_name = file_info.filename
-    #             content = zip_ref.read(file_name)
-    #             result_data.append((file_name, content))
+    with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+        for file_info in zip_ref.infolist():
+            if not file_info.is_dir():
+                file_name = file_info.filename
+                content = zip_ref.read(file_name)
+                # result_data.append((file_name, content))
 
-    # return result_data
+            try:
+                df = pd.read_csv(io.StringIO(content.decode("latin-1")))
+                df = df.where(pd.notna(df), None)
+                return df
+                headers = df.columns.tolist()
+                result_data.append({"msg": f"CSV file '{file_info.filename}' received", "data": df.to_dict(orient='records'),"headers": headers, "status_code": 200, "type": "csv"})
+                break
+            except ValueError:
+                result_data.append({"msg": f"CSV file '{file_info.filename}' contains out-of-range float values", "status_code": 400, "type": "csv"})
 
-    with zipfile.ZipFile(zip_file,"r") as zf:
-        zf.extractall()
+    return result_data
 
-    return zf
-        #     with zip_ref.open(file_info) as file_obj:
-        #         contents = file_obj.read()
+    # with zipfile.ZipFile(zip_file,"r") as zf:
+    #     zf.extractall()
 
-        #         if file_info.filename.lower().endswith(".csv"):
-        #             try:
-        #                 df = pd.read_csv(io.StringIO(contents.decode("latin-1")))
-        #                 df = df.where(pd.notna(df), None)
-        #                 headers = df.columns.tolist()
-        #                 result_data.append({"msg": f"CSV file '{file_info.filename}' received", "data": df.to_dict(orient='records'), "headers": headers, "status_code": 200, "type": "csv"})
-        #             except ValueError:
-        #                 result_data.append({"msg": f"CSV file '{file_info.filename}' contains out-of-range float values", "status_code": 400, "type": "csv"})
+    # return zf
+#     with zip_ref.open(file_info) as file_obj:
+#         contents = file_obj.read()
 
-        #         elif file_info.filename.lower().endswith(".xlsx"):
-        #             df = pd.read_excel(io.BytesIO(contents))
-        #             df = df.where(pd.notna(df), None)
-        #             headers = df.columns.tolist()
-        #             json_data = df.to_json(orient='records', date_format='iso', default_handler=str)
-        #             result_data.append({"msg": f"XLSX file '{file_info.filename}' received", "data": json.loads(json_data), "status_code": 200, "type": "xlsx", "headers": headers})
+#         if file_info.filename.lower().endswith(".csv"):
+#             try:
+#                 df = pd.read_csv(io.StringIO(contents.decode("latin-1")))
+#                 df = df.where(pd.notna(df), None)
+#                 headers = df.columns.tolist()
+#                 result_data.append({"msg": f"CSV file '{file_info.filename}' received", "data": df.to_dict(orient='records'), "headers": headers, "status_code": 200, "type": "csv"})
+#             except ValueError:
+#                 result_data.append({"msg": f"CSV file '{file_info.filename}' contains out-of-range float values", "status_code": 400, "type": "csv"})
 
-        # return result_data
+#         elif file_info.filename.lower().endswith(".xlsx"):
+#             df = pd.read_excel(io.BytesIO(contents))
+#             df = df.where(pd.notna(df), None)
+#             headers = df.columns.tolist()
+#             json_data = df.to_json(orient='records', date_format='iso', default_handler=str)
+#             result_data.append({"msg": f"XLSX file '{file_info.filename}' received", "data": json.loads(json_data), "status_code": 200, "type": "xlsx", "headers": headers})
+
+# return result_data

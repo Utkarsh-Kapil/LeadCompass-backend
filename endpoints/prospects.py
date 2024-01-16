@@ -12,7 +12,6 @@ from schemas.module import ModuleResponse
 from Oauth import get_current_user, create_access_token
 from config.db import get_collection
 from schemas import CreateUserSchema, UserBaseSchema
-from schemas.project import CreateProject
 from utils import hash_password, verify_password, upload_file
 import os
 import traceback

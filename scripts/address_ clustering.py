@@ -164,13 +164,13 @@ st = get_current_time()
  
 with get_db_client() as client:
     db = get_db(client ,DB_NAME)
-    # SOURCE = sys.argv[1]
-    # TARGET = sys.argv[2]
-    # PROJECT_ID = sys.argv[3]
+    SOURCE = sys.argv[1]
+    TARGET = sys.argv[2]
+    PROJECT_ID = sys.argv[3]
 
-    SOURCE = "test_filtered_borrowers"
-    TARGET = "test_borrowers_cluster"
-    PROJECT_ID = "65a3ff7be0d06b46084ef135"
+    # SOURCE = "test_filtered_borrowers"
+    # TARGET = "test_borrowers_cluster"
+    # PROJECT_ID = "65a3ff7be0d06b46084ef135"
 
     source_collection = db[SOURCE]
  

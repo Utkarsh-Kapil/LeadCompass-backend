@@ -14,13 +14,13 @@ client = MongoClient(MONGO_CONNECTION_URL)
 
 db = client[DB_NAME]
 
-# source_collection_name = sys.argv[1]
-# target_collection_name = sys.argv[2]
-# project_id = sys.argv[3]
+source_collection_name = sys.argv[1]
+target_collection_name = sys.argv[2]
+project_id = sys.argv[3]
 
-source_collection_name = "test_final_flattened_transactions"
-target_collection_name = "test_filtered_borrowers"
-project_id = "65a3ff7be0d06b46084ef135"
+# source_collection_name = "test_final_flattened_transactions"
+# target_collection_name = "test_filtered_borrowers"
+# project_id = "65a3ff7be0d06b46084ef135"
 
 source_collection = db[source_collection_name]
 target_collection = db[target_collection_name]
