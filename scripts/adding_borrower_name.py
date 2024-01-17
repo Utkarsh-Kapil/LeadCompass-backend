@@ -14,9 +14,11 @@ COLLECTION_DEED = sys.argv[1]
 COLLECTION_MORTGAGE = sys.argv[2]
 PROJECT_ID = sys.argv[3]
 
+print(f"DEBUG {PROJECT_ID}")
+print(type(PROJECT_ID))
 # COLLECTION_DEED = "test_deed"
 # COLLECTION_MORTGAGE = "test_sam"
-# PROJECT_ID = 1
+# PROJECT_ID = "65a79a690d174f3078f369da"
 
 MONGO_CONNECTION_URL = os.getenv("mongodb://localhost:27017")
 
@@ -25,7 +27,7 @@ def get_current_time():
     return time.time()
 
 # Connect to MongoDB
-client = MongoClient(MONGO_CONNECTION_URL)
+client = MongoClient("mongodb://localhost:27017")
 
 # Accessing the database
 db = client[DB_NAME]

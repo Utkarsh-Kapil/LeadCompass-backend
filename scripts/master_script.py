@@ -4,6 +4,9 @@ from pymongo import MongoClient
 from bson import ObjectId
 import sys
 
+DeedIds = []
+SamIds = []
+
 if "--project_id" in sys.argv:
     project_id_index = sys.argv.index("--project_id")
     ProjectId = sys.argv[project_id_index + 1]
@@ -12,6 +15,21 @@ if "--project_id" in sys.argv:
 else:
     print("Project ID not provided.")
     sys.exit(1)
+
+# if "--deed_inserted_ids" in sys.argv:
+#     deed_id_index = sys.argv.index("--deed_inserted_ids")
+#     DeedIds = sys.argv[deed_id_index + 1].split(",")
+
+#     print(f"Deed IDs: {DeedIds}")
+
+
+
+# if "--sam_inserted_ids" in sys.argv:
+#     sam_id_index = sys.argv.index("--sam_inserted_ids")
+#     SamIds = sys.argv[sam_id_index + 1].split(",")
+
+#     print(f"Sam IDs: {SamIds}")
+
 
 def get_current_time():
     return time.time()
@@ -26,6 +44,7 @@ filtered_deed = "test_filtered_deed"
 flattened_transactions = "test_flattened_transactions"
 final_flattened_transactions = "test_final_flattened_transactions"
 filtered_borrowers = "test_filtered_borrowers"
+borrowers_cluster = "test_borrowers_cluster"
 project_id = ProjectId
 
 
@@ -34,9 +53,18 @@ db = client["lead_compass"]
 collection_flattened_transactions = db["test_flattened_transactions"]
 collection_project = db["project"]
 
+
+# Run the 0th Script
+# st = get_current_time()
+# print("Start 0_updating project ids in sam and deed script")
+# subprocess.call(["python", "scripts/updating_project_ids.py", starting_deed_table, starting_mortgage_table,project_id,DeedIds,SamIds])
+# et = get_current_time()
+# print(f"Total time taken by script 1_adding_tags_to_raw_data.py is {et-st} seconds")
+
+
 # Run the first script
 st = get_current_time()
-print("Start 1_adding_tags_to_sam_data script")
+print("Start 1_adding_tags_to_sam_and_deed_data script")
 subprocess.call(["python", "scripts/adding_borrower_name.py", starting_deed_table, starting_mortgage_table,project_id])
 et = get_current_time()
 print(f"Total time taken by script 1_adding_tags_to_raw_data.py is {et-st} seconds")
@@ -84,6 +112,12 @@ subprocess.call(["python", "scripts/filtered_borrowers.py", final_flattened_tran
 et = get_current_time()
 print(f"Total time taken by script 6_filtered_borrowers.py is {et - st} seconds")
 
+# Run the seventh script
+st = get_current_time()
+print("Start 7_clustered_borrowers script")
+subprocess.call(["python", "scripts/address_clustering.py", filtered_borrowers, borrowers_cluster,project_id])
+et = get_current_time()
+print(f"Total time taken by script 7_clustered_borrowers.py is {et - st} seconds")
 
 end = get_current_time()
 

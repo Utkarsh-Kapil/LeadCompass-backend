@@ -8,9 +8,9 @@ load_dotenv()
 
 DB_NAME = "lead_compass"
 
-MONGO_CONNECTION_URL = os.getenv("mongodb://localhost:27017")
+# MONGO_CONNECTION_URL = os.getenv("mongodb://localhost:27017")
 
-client = MongoClient(MONGO_CONNECTION_URL)
+client = MongoClient("mongodb://localhost:27017")
 
 db = client[DB_NAME]
 
@@ -37,6 +37,7 @@ st = get_current_time()
 pipeline = [
     {
         "$match": {"LC_Borrower":{"$ne":""},"ProjectId":project_id}
+        # "$match": {"LC_Borrower":{"$ne":""}}
     },
     {      
         "$group": {

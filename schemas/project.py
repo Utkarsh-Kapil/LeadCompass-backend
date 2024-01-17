@@ -14,7 +14,7 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 class ProjectSchema(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     user_email: EmailStr
-    total_mortgage_transaction: Optional[int] = None
+    total_mortgage_transaction: Optional[dict] = None
     last_10_year_transactions_mortgage: Optional[int] = None
     residential_properties_transactions_mortgage: Optional[int] = None
     status: Optional[str] = ""

@@ -6,6 +6,10 @@ import pandas as pd
 from fastapi import Depends, HTTPException, status, File, UploadFile
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from passlib.context import CryptContext
+import numpy as np
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+import re
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -82,28 +86,53 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 
+def convert_to_serializable(value):
+    if isinstance(value, np.floating) and (np.isnan(value) or np.isinf(value)):
+        return None
+    return value
 
+def convert_to_json_compliant(data):
+    return json.dumps(data, default=convert_to_serializable)
 
 async def unzip_file(file: UploadFile = File(...)):
-    zip_file = file
+    zip_file = file.file 
+
+    result_data = {}
 
     with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-        result_data = []  
+        for file_info in zip_ref.infolist():
+            if not file_info.is_dir():
+                file_name = file_info.filename
+                print(file_name)
+                content = zip_ref.read(file_name)
 
-        for file_name in zip_ref.namelist():
-            contents = zip_ref.read(file_name)
+                file_src = re.search(r"sam|deed", file_name)
+                if file_src:
+                    file_src = file_src.group()
+                else:
+                    return {"msg": "file_name should have either sam or deed"}
+                
+                try:
+                    df = pd.read_csv(io.StringIO(content.decode("latin-1")))
+                    df = df.map(convert_to_serializable)
+                    df = df.fillna('')
+                    headers = df.columns.tolist()
 
-            if file_name.lower().endswith(".csv"):
-                df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
-                df = df.where(pd.notna(df), None)
-                headers = df.columns.tolist()
-                result_data.append({"msg": f"CSV file '{file_name}' received", "data": df.to_dict(orient='records'), "headers": headers, "status_code": 200, "type": "csv"})
-
-            elif file_name.lower().endswith(".xlsx"):
-                df = pd.read_excel(io.BytesIO(contents))
-                df = df.where(pd.notna(df), None)
-                headers = df.columns.tolist()
-                json_data = df.to_json(orient='records', date_format='iso', default_handler=str)
-                result_data.append({"msg": f"XLSX file '{file_name}' received", "data": json.loads(json_data), "status_code": 200, "type": "xlsx", "headers": headers})
-
-        return result_data
+                    if file_src not in result_data:
+                        result_data[file_src]= {
+                            "msg": f"CSV file '{file_info.filename}' received",
+                            "data": json.loads(convert_to_json_compliant(df.to_dict(orient='records'))),
+                            "headers": headers,
+                            "status_code": 200,                  
+                            "type": "csv",
+                            "file_name": file_info.filename
+                        }
+                   
+                except ValueError:
+                    result_data["error"] = {
+                        "msg": f"CSV file '{file_info.filename}' contains out-of-range float values",
+                        "status_code": 400
+                    }
+    return {"msg": f"CSV file {file_info.filename}","data": result_data}
+    # response_content = jsonable_encoder(result_data)
+    # return JSONResponse(content=response_content, media_type="application/json")

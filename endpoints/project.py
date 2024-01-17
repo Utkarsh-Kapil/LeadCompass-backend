@@ -1,7 +1,7 @@
 from datetime import datetime
 from bson import ObjectId
 from dotenv import load_dotenv, find_dotenv
-from fastapi import APIRouter, HTTPException, Depends, Body, Query, BackgroundTasks, UploadFile, File, status
+from fastapi import APIRouter, HTTPException, Depends, Body, Query, BackgroundTasks, UploadFile, File, status, Response
 import subprocess
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -9,14 +9,17 @@ import asyncio
 from Oauth import get_current_user, create_access_token
 from config.db import get_collection
 from data import load_json
-from schemas import CreateUserSchema, UserBaseSchema
+from schemas import UserBaseSchema
 from schemas.project import ProjectSchema,ProjectResponse
-from utils import hash_password, verify_password, upload_file
+from utils import hash_password, verify_password, upload_file, unzip_file
 import os
 import zipfile
 import pandas as pd
 import io
 import json
+import numpy as np
+import re
+
 
 router = APIRouter(
     prefix="",
@@ -47,7 +50,7 @@ def get_project_collection():
     project_collection = db["project"]
     return project_collection
 
-def run_scripts(id:str):
+def run_scripts(id:str,sam_inserted_ids:list,deed_inserted_ids:list):
 
     project_id = id
     cur_dir = os.getcwd()
@@ -57,7 +60,13 @@ def run_scripts(id:str):
     script_path = f"{script_directory}/{script_filename}"
     subprocess.run(["python", script_path, "--project_id", project_id])
 
+    # subprocess.run(["python", script_path, "--project_id", project_id, "--deed_inserted_ids", ",".join(deed_inserted_ids),"--sam_inserted_ids", ",".join(sam_inserted_ids)])
 
+async def update_collection_async(collection, ids, project_id):
+    if ids:
+        collection.update_many({"_id": {"$in": ids}}, {"$set": {"ProjectId": str(project_id)}})
+
+    
 @router.post('/project', response_model=ProjectResponse, response_model_by_alias=False, response_description="Project added successfully", status_code=status.HTTP_201_CREATED)
 async def create_project(background_tasks: BackgroundTasks, file: UploadFile = File(None),
                          user: UserBaseSchema = Depends(get_current_user), project: ProjectSchema = None):
@@ -67,35 +76,75 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         collection_deed = get_deed_collection()
         result_sam = []
         companies = []
-        # if file:
-        #     response = await upload_file(file)
+        sam_inserted_ids = []
+        deed_inserted_ids = []
 
-        #     if response.get("status_code") == 200:
-        #         if response.get("type") == "json":
-        #             companies = response.get('data', dict())
+        try:
+            if file.filename.endswith('.zip'):
+                response = await unzip_file(file)
 
-        #         elif response.get("type") == "csv":
-        #             companies = response.get('data', [])
+                sam_response = response.get("data",{}).get("sam",{})
+                deed_response = response.get("data",{}).get("deed",{})
 
-        #         elif response.get("type") == "xlsx":
-        #             companies = response.get('data', [])
+                if sam_response or deed_response is not None:
 
-        #     if not companies:
-        #         return {"msg": "No Companies Provided in request"}
+                    if sam_response and sam_response.get("status_code") == 200:
 
-        #     result_sam = collection_sam.insert_many(companies)
+                        if sam_response.get("type") == "csv":
+                            sam_transactions = sam_response.get('data', [])
 
-        # else:
-        #     companies = load_json.company_data
-        #     result_sam = collection_sam.insert_many(companies)
+                        if not sam_transactions:
+                            return {"msg": "No Sam Transaction Provided in request"}
 
-        # inserted_ids = result_sam.inserted_ids
+                        result_sam = collection_sam.insert_many(sam_transactions)
+
+                    if deed_response and deed_response.get("status_code") == 200:
+
+                        if deed_response.get("type") == "csv":
+                            deed_transactions = deed_response.get('data', [])
+
+                        if not deed_transactions:
+                            return {"msg": "No Deed Transaction Provided in request"}
+
+                        result_deed = collection_deed.insert_many(deed_transactions)
+
+            elif file:
+                response = await upload_file(file)
+
+                if response.get("status_code") == 200:
+                    if response.get("type") == "json":
+                        companies = response.get('data', dict())
+
+                    elif response.get("type") == "csv" or response.get("type") == "xlsx":
+                        companies = response.get('data', [])
+
+                    if not companies:
+                        return {"msg": "No Companies Provided in request"}
+
+                    result_sam = collection_sam.insert_many(companies)
+            
+            else:
+                cur_dir = os.getcwd()
+                sam_file_path = os.path.join(cur_dir, "data/sam.json")
+                deed_file_path = os.path.join(cur_dir, "data/deeds.json")
+                sam_transactions = load_json.load_data_from_json(sam_file_path)
+                deed_transactions = load_json.load_data_from_json(deed_file_path)
+
+                result_sam = collection_sam.insert_many(sam_transactions)
+                result_deed = collection_deed.insert_many(deed_transactions)
+
+            sam_inserted_ids = result_sam.inserted_ids
+            deed_inserted_ids = result_deed.inserted_ids
+
+
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"file not uploaded {str(e)}")
 
         collection_project = get_project_collection()
         new_project = {
             "id": ObjectId(),
             "user_email": user.get('email'),
-            "total_mortgage_transaction": len(companies),
+            "total_mortgage_transaction": {'sam_transactions': len(sam_transactions), 'deed_transactions': len(deed_transactions)},
             "created_at": datetime.now(),
             "status": "processing"
         }
@@ -112,16 +161,22 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         new_project = ProjectSchema(**new_project)
 
         result_project = collection_project.insert_one(new_project.model_dump(by_alias=True, exclude=["id"]))
-        inserted_id = result_project.inserted_id
+        project_id = result_project.inserted_id
 
-        # collection_sam.update_many({"_id": {"$in": inserted_ids}},
-        #                            {"$set": {"ProjectId": new_project.get('project_id')}})
-        
-        collection_sam.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
-        collection_deed.update_many({}, {"$set": {"ProjectId": str(inserted_id)}})
+        if file.filename.endswith('.zip'):
+            await asyncio.gather(
+                update_collection_async(collection_sam, sam_inserted_ids,str(new_project.id)),
+                update_collection_async(collection_deed,deed_inserted_ids,str(new_project.id))
+            )
+        #took 0.22 sec for 5k*2 updates
+        #todo : for 1million updates, will take approx 25 sec , so need to run this in script as well
+        else:
+            await asyncio.gather(
+                update_collection_async(collection_sam, sam_inserted_ids,str(new_project.id))
+            )
 
-        background_tasks.add_task(run_scripts, str(new_project.id))
-        return ProjectResponse(message = "project added successfully",result=new_project)
+        background_tasks.add_task(run_scripts, str(new_project.id), sam_inserted_ids, deed_inserted_ids)
+        return ProjectResponse(message = "project added successfully",result=new_project, total=1)
 
     except HTTPException as http_exception:
         raise http_exception
@@ -184,55 +239,3 @@ async def get_project_by_id(id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-
-
-@router.post('/file/unzip')
-async def unzip_file(file: UploadFile = File(...)):
-    zip_file = file.file  # Access the underlying SpooledTemporaryFile
-
-    result_data = []  
-
-    with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-        for file_info in zip_ref.infolist():
-            if not file_info.is_dir():
-                file_name = file_info.filename
-                content = zip_ref.read(file_name)
-                # result_data.append((file_name, content))
-
-            try:
-                df = pd.read_csv(io.StringIO(content.decode("latin-1")))
-                df = df.where(pd.notna(df), None)
-                return df
-                headers = df.columns.tolist()
-                result_data.append({"msg": f"CSV file '{file_info.filename}' received", "data": df.to_dict(orient='records'),"headers": headers, "status_code": 200, "type": "csv"})
-                break
-            except ValueError:
-                result_data.append({"msg": f"CSV file '{file_info.filename}' contains out-of-range float values", "status_code": 400, "type": "csv"})
-
-    return result_data
-
-    # with zipfile.ZipFile(zip_file,"r") as zf:
-    #     zf.extractall()
-
-    # return zf
-#     with zip_ref.open(file_info) as file_obj:
-#         contents = file_obj.read()
-
-#         if file_info.filename.lower().endswith(".csv"):
-#             try:
-#                 df = pd.read_csv(io.StringIO(contents.decode("latin-1")))
-#                 df = df.where(pd.notna(df), None)
-#                 headers = df.columns.tolist()
-#                 result_data.append({"msg": f"CSV file '{file_info.filename}' received", "data": df.to_dict(orient='records'), "headers": headers, "status_code": 200, "type": "csv"})
-#             except ValueError:
-#                 result_data.append({"msg": f"CSV file '{file_info.filename}' contains out-of-range float values", "status_code": 400, "type": "csv"})
-
-#         elif file_info.filename.lower().endswith(".xlsx"):
-#             df = pd.read_excel(io.BytesIO(contents))
-#             df = df.where(pd.notna(df), None)
-#             headers = df.columns.tolist()
-#             json_data = df.to_json(orient='records', date_format='iso', default_handler=str)
-#             result_data.append({"msg": f"XLSX file '{file_info.filename}' received", "data": json.loads(json_data), "status_code": 200, "type": "xlsx", "headers": headers})
-
-# return result_data

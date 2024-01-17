@@ -99,6 +99,8 @@ def main():
     st = get_current_time()
             
     filter_criteria = {"LC_IsTrustAndNetLoanLessThanMillionOrLessThanThreePropertyTransactions": "N", "ProjectId": project_id}
+    # filter_criteria = {"LC_IsTrustAndNetLoanLessThanMillionOrLessThanThreePropertyTransactions": "N"}
+
 
     fields_to_select = get_fields_to_select()
 
