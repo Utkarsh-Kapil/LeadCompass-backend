@@ -108,20 +108,6 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
                         result_deed = collection_deed.insert_many(deed_transactions)
 
-
-                else:
-                    cur_dir = os.getcwd()
-                    sam_file_path = os.path.join(cur_dir, "data/sam.json")
-                    deed_file_path = os.path.join(cur_dir, "data/deeds.json")
-                    sam_transactions = load_json.load_data_from_json(sam_file_path)
-                    deed_transactions = load_json.load_data_from_json(deed_file_path)
-
-                    result_sam = collection_sam.insert_many(sam_transactions)
-                    result_deed = collection_deed.insert_many(deed_transactions)
-
-                sam_inserted_ids = result_sam.inserted_ids
-                deed_inserted_ids = result_deed.inserted_ids
-
             elif file:
                 response = await upload_file(file)
 
@@ -137,13 +123,26 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
                     result_sam = collection_sam.insert_many(companies)
 
-                else:
-                    cur_dir = os.getcwd()
-                    sam_file_path = os.path.join(cur_dir, "data/sam.json")
-                    companies = load_json.load_data_from_json(sam_file_path)
-                    result_sam = collection_sam.insert_many(companies)
+            else:
+                cur_dir = os.getcwd()
+                sam_file_path = os.path.join(cur_dir, "data/sam.json")
+                deed_file_path = os.path.join(cur_dir, "data/deeds.json")
+                sam_transactions = load_json.load_data_from_json(sam_file_path)
+                deed_transactions = load_json.load_data_from_json(deed_file_path)
 
-                sam_inserted_ids = result_sam.inserted_ids
+                result_sam = collection_sam.insert_many(sam_transactions)
+                result_deed = collection_deed.insert_many(deed_transactions)
+
+            sam_inserted_ids = result_sam.inserted_ids
+            deed_inserted_ids = result_deed.inserted_ids
+
+                # else:
+                #     cur_dir = os.getcwd()
+                #     sam_file_path = os.path.join(cur_dir, "data/sam.json")
+                #     companies = load_json.load_data_from_json(sam_file_path)
+                #     result_sam = collection_sam.insert_many(companies)
+
+                # sam_inserted_ids = result_sam.inserted_ids
 
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"file not uploaded {str(e)}")
