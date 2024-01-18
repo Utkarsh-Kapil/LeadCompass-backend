@@ -172,17 +172,17 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
         if file.filename.endswith('.zip'):
             await asyncio.gather(
-                update_collection_async(collection_sam, sam_inserted_ids,str(new_project.id)),
-                update_collection_async(collection_deed,deed_inserted_ids,str(new_project.id))
+                update_collection_async(collection_sam, sam_inserted_ids,str(project_id)),
+                update_collection_async(collection_deed,deed_inserted_ids,str(project_id))
             )
         #took 0.22 sec for 5k*2 updates
         #todo : for 1million updates, will take approx 25 sec , so need to run this in script as well
         else:
             await asyncio.gather(
-                update_collection_async(collection_sam, sam_inserted_ids,str(new_project.id))
+                update_collection_async(collection_sam, sam_inserted_ids,str(project_id))
             )
 
-        background_tasks.add_task(run_scripts, str(new_project.id), sam_inserted_ids, deed_inserted_ids)
+        background_tasks.add_task(run_scripts, str(project_id), sam_inserted_ids, deed_inserted_ids)
         return ProjectResponse(message = "project added successfully",result=new_project, total=1)
 
     except HTTPException as http_exception:

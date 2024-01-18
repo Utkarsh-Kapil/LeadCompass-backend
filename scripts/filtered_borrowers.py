@@ -52,7 +52,8 @@ pipeline = [
                     "FIPSCode": "$FIPSCode",
                     "Source": "$LC_Source",
                     "TransactionId": "$TransactionId",
-                    "DPID": "$DPID"
+                    "DPID": "$DPID",
+                    "OriginalDateOfContract": "$OriginalDateOfContract"
                 }
             },
             "LC_BorrowerFullAddressSet": {"$addToSet": "$LC_BorrowerFullAddress"},
@@ -66,7 +67,8 @@ pipeline = [
                     "BorrowerMailCity": "$BorrowerMailCity",
                     "BorrowerMailState": "$BorrowerMailState"
                 }
-            }
+            },
+            "ProjectId": {"$first":"$ProjectId"},
         }
     },
     {
@@ -80,20 +82,34 @@ pipeline = [
             "_id": 0,
             "DPIDSet": 0
         }
-    },
-    {
-        "$out": target_collection_name
     }
+    # {
+    #     "$out": target_collection_name
+    # }
 ]
  
  
-source_collection.aggregate(pipeline)
+# source_collection.aggregate(pipeline)
  
-# source_collection.aggregate(pipeline, allowDiskUse=True)
+# # source_collection.aggregate(pipeline, allowDiskUse=True)
  
+# et = get_current_time()
+ 
+# print(f"Time taken {et-st}")
+ 
+# # Close the MongoDB connection
+# client.close()
+
+
+# Perform aggregation on the source collection
+result = source_collection.aggregate(pipeline)
+
+# Insert the newly fetched documents into the target collection
+target_collection.insert_many(result)
+
 et = get_current_time()
- 
-print(f"Time taken {et-st}")
- 
+
+print(f"Time taken: {et - st}")
+
 # Close the MongoDB connection
 client.close()

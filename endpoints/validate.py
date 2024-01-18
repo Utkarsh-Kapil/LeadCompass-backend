@@ -68,6 +68,35 @@ def validate_fields(companies: List[dict], companies_headers: List):
 
     return {"msg": "file validated successfully", "invalid_transactions": invalid_transactions, "is_valid": True}
 
+def validate_deed_fields(companies: List[dict], companies_headers: List):
+    fields_list = [
+        "FIPSCode", "PropertyZipCode", "PropertyZip4", "PropertyUnitNumber",
+        "PropertyHouseNumber", "RecordingDate", "RecorderBookNumber", "RecorderPageNumber",
+        "RecorderDocumentNumber", "APN", "MultiAPNFlag", "LegalBlock", "LegalSection",
+        "LegalDistrict", "LegalLandLot", "LegalUnit", "LegalPhaseNumber", "LegalTractNumber",
+        "LenderNameID", "DueDate", "AdjustableRateRider", "FirstChangeDateYearConversionRider",
+        "FirstChangeDateMonthDayConversionRider", "PrepaymentRider", "PrepaymentTermPenaltyRider",
+        "BorrowerMailUnitNumber", "BorrowerMailZipCode", "BorrowerMailZip4", "OriginalDateOfContract",
+        "LenderMailFullStreetAddress", "LenderMailZipCode", "LenderMailZip4", "LoanTermMonths",
+        "LoanTermYears", "AssessorLandUse", "LoanTransactionType", "LoanOrganizationNMLS_ID",
+        "MortgageBrokerNMLS_ID", "LoanOfficerNMLS_ID", "DPID", "UpdateTimeStamp"
+    ]
+    # print(companies_headers)
+    missing_fields = check_missing_fields(companies_headers, fields_list)
+    if missing_fields:
+        return {"msg": "invalid_file", "missing_field": missing_fields, "is_valid": False}
+
+    invalid_transactions = []
+    for company in companies:
+        try:
+            PropertyData(**company)
+
+        except ValidationError as e:
+            invalid_transactions.append(company)
+
+    return {"msg": "file validated successfully", "invalid_transactions": invalid_transactions, "is_valid": True}
+
+
 
 @router.post('/validate')
 async def validate_file(api_key: str = Body(None), source: str = Body(None), file: UploadFile = File(None)):
