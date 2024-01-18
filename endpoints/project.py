@@ -108,6 +108,20 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
                         result_deed = collection_deed.insert_many(deed_transactions)
 
+
+                else:
+                    cur_dir = os.getcwd()
+                    sam_file_path = os.path.join(cur_dir, "data/sam.json")
+                    deed_file_path = os.path.join(cur_dir, "data/deeds.json")
+                    sam_transactions = load_json.load_data_from_json(sam_file_path)
+                    deed_transactions = load_json.load_data_from_json(deed_file_path)
+
+                    result_sam = collection_sam.insert_many(sam_transactions)
+                    result_deed = collection_deed.insert_many(deed_transactions)
+
+                sam_inserted_ids = result_sam.inserted_ids
+                deed_inserted_ids = result_deed.inserted_ids
+
             elif file:
                 response = await upload_file(file)
 
@@ -122,20 +136,14 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
                         return {"msg": "No Companies Provided in request"}
 
                     result_sam = collection_sam.insert_many(companies)
-            
-            else:
-                cur_dir = os.getcwd()
-                sam_file_path = os.path.join(cur_dir, "data/sam.json")
-                deed_file_path = os.path.join(cur_dir, "data/deeds.json")
-                sam_transactions = load_json.load_data_from_json(sam_file_path)
-                deed_transactions = load_json.load_data_from_json(deed_file_path)
 
-                result_sam = collection_sam.insert_many(sam_transactions)
-                result_deed = collection_deed.insert_many(deed_transactions)
+                else:
+                    cur_dir = os.getcwd()
+                    sam_file_path = os.path.join(cur_dir, "data/sam.json")
+                    companies = load_json.load_data_from_json(sam_file_path)
+                    result_sam = collection_sam.insert_many(companies)
 
-            sam_inserted_ids = result_sam.inserted_ids
-            deed_inserted_ids = result_deed.inserted_ids
-
+                sam_inserted_ids = result_sam.inserted_ids
 
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"file not uploaded {str(e)}")
@@ -237,5 +245,58 @@ async def get_project_by_id(id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+def convert_to_serializable(value):
+    if isinstance(value, np.floating) and (np.isnan(value) or np.isinf(value)):
+        return None
+    return value
+
+def convert_to_json_compliant(data):
+    return json.dumps(data, default=convert_to_serializable)
+
+@router.post('/file/unzip')
+async def unzip_file(file: UploadFile = File(...)):
+    zip_file = file.file  # Access the underlying SpooledTemporaryFile
+
+    result_data = {}
+
+    with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+        for file_info in zip_ref.infolist():
+            if not file_info.is_dir():
+                file_name = file_info.filename
+                print(file_name)
+                content = zip_ref.read(file_name)
+
+                file_src = re.search(r"sam|deed", file_name)
+                if file_src:
+                    file_src = file_src.group()
+                else:
+                    file_src = "sam"
+                try:
+                    df = pd.read_csv(io.StringIO(content.decode("latin-1")))
+                    df = df.map(convert_to_serializable)
+                    df = df.fillna('')
+                    headers = df.columns.tolist()
+
+                    if file_src not in result_data:
+                        result_data[file_src]= {
+                            "msg": f"CSV file '{file_info.filename}' received",
+                            "data": json.loads(convert_to_json_compliant(df.to_dict(orient='records'))),
+                            "headers": headers,
+                            "status_code": 200,                  
+                            "type": "csv",
+                            "file_name": file_info.filename
+                        }
+                   
+                except ValueError:
+                    result_data["error"] = {
+                        "msg": f"CSV file '{file_info.filename}' contains out-of-range float values",
+                        "status_code": 400
+                    }
+    return {"msg": f"CSV file {file_info.filename}","data": result_data}
+    # response_content = jsonable_encoder(result_data)
+    # return JSONResponse(content=response_content, media_type="application/json")
 
 
