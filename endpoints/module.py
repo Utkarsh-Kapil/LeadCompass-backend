@@ -1,4 +1,5 @@
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 from bson import ObjectId
 from dotenv import load_dotenv, find_dotenv
@@ -54,15 +55,31 @@ def get_prospects_collection():
     prospects_collection = db["prospects"]
     return prospects_collection
 
+MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
 
 @router.post('/module', response_model=ModuleResponse, response_model_by_alias=False, response_description="Module added successfully", status_code=status.HTTP_201_CREATED)
 async def create_module(filters: TransactionFilters, module_name: str = Body(...), project_id: int = Body(...), user: UserBaseSchema = Depends(get_current_user)):
     try:
-        print(project_id)
-        print(user)
+        # Getting collection
+        collection_mvp_grp = get_group_mvp_collection()
 
+        # Initializing query filter with current project_id to filter group_mvp documents
         query_filter = {"ProjectId": project_id}
 
+        # Setting amount filter
         if filters.amount and filters.amount.value:
             if filters.amount.prefix == "less_than_equal_to":
                 query_filter["RcCalTotalLoanAmount"] = {
@@ -72,6 +89,7 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
                 query_filter["RcCalTotalLoanAmount"] = {
                     "$gte": filters.amount.value}
 
+        # Setting transaction count filter
         if filters.transaction_count and filters.transaction_count.value:
             if filters.transaction_count.prefix == "less_than_equal_to":
                 query_filter["RcCalNumberOfTransactions"] = {
@@ -81,6 +99,7 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
                 query_filter["RcCalNumberOfTransactions"] = {
                     "$gte": filters.transaction_count.value}
         
+        # Setting transaction year filter
         if filters.transaction_year and filters.transaction_year.value:
             if filters.transaction_year.prefix == "less_than_equal_to":
                 query_filter["RcCalLatestTransactionDate"] = {
@@ -90,20 +109,7 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
                 query_filter["RcCalLatestTransactionDate"] = {
                     "$gte": filters.transaction_year.value}
 
-        # if filters.duration and filters.duration.value: 
-
-            # if filters.duration.value == 'All Durations':
-            #     query_filter["RcCalLatestTransactionDate"] = {}
-
-            # if filters.transaction_count.value == 'Less than 6 months':
-            #     query_filter["RcCalLatestTransactionDate"] = {"$gt": 1}
-
-            # if filters.transaction_count.value == 'Less than 1 year':
-            #     query_filter["RcCalLatestTransactionDate"] = {"$lt": 10}
-
-            # if filters.transaction_count.value == 'Greater than 1 year':
-            #     query_filter["RcCalLatestTransactionDate"] = {"$gt": 10}
-
+        # Setting property state/county filter
         if filters.states and len(filters.states) != 0:
             if (filters.county_codes and len(filters.county_codes) > 0):
                 query_filter["$or"] = [{f"FIPSCode.{county_fips}": {
@@ -111,22 +117,54 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
             else:
                 query_filter["$or"] = [{f"PropertyState.{state}": {
                     "$exists": True}} for state in filters.states]
-
+        
+        # Setting Borrower type filter
         if filters.borrower_type and filters.borrower_type != "All Borrowers":
             borrower_type = 'I' if filters.borrower_type.lower() == "individual" else 'C'
             query_filter[f"RcCalType.{borrower_type}"] = {"$exists": True}
-
-        collection_mvp_grp = get_group_mvp_collection()
 
         filtered_documents_count = collection_mvp_grp.count_documents(query_filter)
 
         query_filter["module_id"] = None
 
-        filtered_documents_untag_count = collection_mvp_grp.count_documents(query_filter)
+        pipeline = [
+            {"$match": query_filter},
+            {"$group": {
+                "_id": None,  # Replace with the field you want to group by
+                "filtered_documents_untag_count": {"$sum": 1},
+                "total_loan_count": {"$sum": "$RcCalNumberOfLoans"},
+                "total_loan_amount": {"$sum": "$RcCalTotalLoanAmount"},
+                "total_partial_loan_amount": {"$median": {
+                    "input": "$RcCalTotalLoanAmount",
+                    "method": "approximate"
+                }},
+                "unique_DPID_keys": {"$addToSet": {
+                    "$map": {
+                        "input": {"$objectToArray": "$DPID"},
+                        "as": "pair",
+                        "in": "$$pair.k"
+                    }
+                }},
+            }},
+            {
+                "$project": {
+                    "_id": 0,
+                    "filtered_documents_untag_count": 1,
+                    "total_loan_count": 1,
+                    "total_loan_amount": 1,
+                    "total_properties": {"$size": "$unique_DPID_keys"},
+                    "total_partial_loan_amount": 1,
+                }
+            }
+        ]
         
-        if(filtered_documents_untag_count == 0):
+        result = list(collection_mvp_grp.aggregate(pipeline=pipeline))
+
+        if(result == []):
             raise HTTPException(status_code=400, detail="No data found for the given filters")
         
+        filtered_documents_untag_count, total_loan_count, total_loan_amount, total_partial_loan_amount, total_properties = result[0].values()
+         
         already_taged_documents_count = filtered_documents_count - filtered_documents_untag_count
         
         project = get_project_collection().find_one({"project_id": project_id})
@@ -140,7 +178,88 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
 
         if module:
             raise HTTPException(status_code=400, detail="Module already exists")
+        
+        date = datetime.now()
+        all_months = []
 
+        for _ in range(12):
+            print(date.year, date.month)
+            all_months.insert(0, {'year': date.year, 'month': date.month, 'count': 0})
+            date -= relativedelta(months=1)  # subtract approximately one month
+
+        pipeline = [
+            { "$match": query_filter},
+            { "$unwind": "$RcCalTransactions" },
+            {
+                "$addFields": {
+                    "RcCalTransactions.OriginalDateOfContract": {
+                        "$toDate": {
+                            "$concat": [
+                                {
+                                    "$substr": [
+                                        { "$toString": "$RcCalTransactions.OriginalDateOfContract" },
+                                        0,
+                                        4,
+                                    ],
+                                },
+                                "-",
+                                {
+                                    "$substr": [
+                                        { "$toString": "$RcCalTransactions.OriginalDateOfContract" },
+                                        4,
+                                        2,
+                                    ],
+                                },
+                                "-",
+                                {
+                                    "$substr": [
+                                        { "$toString": "$RcCalTransactions.OriginalDateOfContract" },
+                                        6,
+                                        2,
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+            {
+                "$match": {
+                    "RcCalTransactions.OriginalDateOfContract": {
+                    "$gte": datetime(2022, 1, 1),
+                    "$lt": datetime(2024, 1, 1),
+                    },
+                },
+            },
+            {
+                "$group": {
+                    "_id": {
+                    "year": { "$year": "$RcCalTransactions.OriginalDateOfContract" },
+                    "month": { "$month": "$RcCalTransactions.OriginalDateOfContract" },
+                    },
+                    "count": { "$sum": 1 },
+                },
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "year": "$_id.year",
+                    "month": "$_id.month",
+                    "count": 1,
+                },
+            }
+        ]
+
+        result = list(get_group_mvp_collection().aggregate(pipeline=pipeline))
+
+        for month in all_months:
+            for item in result:
+                if item["year"] == month["year"] and item["month"] == month["month"]:
+                    month["count"] = item["count"]
+                    break
+            
+            month["month"] = MONTH_NAMES[month["month"] - 1]
+        
         module_obj = {
             "name": module_name,
             "status": "bronze",
@@ -156,6 +275,11 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
                 "raw": {"created_at": project["created_at"]},
                 "bronze": {"created_at": datetime.now()},
             },
+            "monthly_transactions_for_past_12_months": all_months,
+            "total_loan_count": total_loan_count,
+            "total_properties": total_properties,
+            "total_loan_amount": total_loan_amount,
+            "total_partial_loan_amount": total_partial_loan_amount,
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
         }

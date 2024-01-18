@@ -56,6 +56,11 @@ class ModuleSchema(BaseModel):
     filtered_documents_count: int
     filtered_documents_untag_count: int
     already_taged_documents_count: int
+    total_partial_loan_amount: int
+    monthly_transactions_for_past_12_months: Optional[List[dict]] = None
+    total_loan_amount: Optional[int] = None
+    total_loan_count: Optional[int] = None
+    total_properties: Optional[int] = None
     timeline: Optional[dict] = None
     created_at: datetime
     updated_at: datetime

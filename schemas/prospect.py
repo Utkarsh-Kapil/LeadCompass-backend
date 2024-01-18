@@ -31,6 +31,13 @@ class Transaction(BaseModel):
     ProjectId: int
     RcCalType: str
 
+class GroupedTransaction(BaseModel):
+    DPID: Union[str,int]
+    total_loan_count: int
+    total_loan_amount: int
+    lenders_name: List[str]
+    transactions: List[Transaction]
+
 class ProspectModel(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     RcCalBorrower: str
@@ -56,10 +63,13 @@ class ProspectModel(BaseModel):
     OriginalDateOfContract: dict
     LenderNameBeneficiary: dict
     RcCalLatestTransactionDate: int
-    RcCalTransactions: List[Transaction]
+    RcCalTransactions: Union[List[GroupedTransaction], List[Transaction]]
     module_id: Optional[PyObjectId] = Field(alias="module_id", default=None)
 
 class ProspectResponse(BaseModel):
     message: str
-    total: Optional[int] = None
+    result: ProspectModel
+class ProspectsResponse(BaseModel):
+    message: str
+    total: int
     result: List[ProspectModel]
