@@ -16,3 +16,6 @@ __pycache__/
 /env/
 
 /lead/
+
+/data/deeds.json
+/data/sam.json
