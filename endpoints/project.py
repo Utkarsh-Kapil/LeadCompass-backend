@@ -75,7 +75,6 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         collection_sam = get_sam_collection()
         collection_deed = get_deed_collection()
         result_sam = []
-        companies = []
         sam_inserted_ids = []
         deed_inserted_ids = []
 
@@ -113,15 +112,17 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
 
                 if response.get("status_code") == 200:
                     if response.get("type") == "json":
-                        companies = response.get('data', dict())
+                        sam_transactions = response.get('data', dict())
 
                     elif response.get("type") == "csv" or response.get("type") == "xlsx":
-                        companies = response.get('data', [])
+                        sam_transactions = response.get('data', [])
 
-                    if not companies:
+                    if not sam_transactions:
                         return {"msg": "No Companies Provided in request"}
 
-                    result_sam = collection_sam.insert_many(companies)
+                    result_sam = collection_sam.insert_many(sam_transactions)
+                    result_deed = None
+                    deed_transactions = []
 
             else:
                 cur_dir = os.getcwd()
@@ -133,16 +134,11 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
                 result_sam = collection_sam.insert_many(sam_transactions)
                 result_deed = collection_deed.insert_many(deed_transactions)
 
-            sam_inserted_ids = result_sam.inserted_ids
-            deed_inserted_ids = result_deed.inserted_ids
-
-                # else:
-                #     cur_dir = os.getcwd()
-                #     sam_file_path = os.path.join(cur_dir, "data/sam.json")
-                #     companies = load_json.load_data_from_json(sam_file_path)
-                #     result_sam = collection_sam.insert_many(companies)
-
-                # sam_inserted_ids = result_sam.inserted_ids
+            if result_sam:
+                sam_inserted_ids = result_sam.inserted_ids
+            
+            if result_deed:
+                deed_inserted_ids = result_deed.inserted_ids
 
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"file not uploaded {str(e)}")

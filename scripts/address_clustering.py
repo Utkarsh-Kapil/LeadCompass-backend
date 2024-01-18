@@ -45,7 +45,7 @@ with get_db_client() as client:
 
     source_collection = db[SOURCE]
  
-    projected_fields = {"LC_Borrower": 1, "LC_TotalLoanAmount": 1, "LC_NumberOfLoans": 1, "LC_BorrowerFullAddressJsonSet": 1, "LC_LatestTransactionDate": 1, "LC_TotalNumberOfPropertyTransactions": 1, "_id": 1, "LC_BorrowerFullAddressSet":1}
+    projected_fields = {"LC_Borrower": 1, "LC_TotalLoanAmount": 1, "LC_NumberOfLoans": 1, "LC_BorrowerFullAddressJsonSet": 1, "LC_LatestTransactionDate": 1, "LC_TotalNumberOfPropertyTransactions": 1, "_id": 1, "LC_BorrowerFullAddressSet":1, "ProjectId": 1 }
     
     project_id = PROJECT_ID
     # Fetch all documents from the collection
@@ -110,7 +110,7 @@ with get_db_client() as client:
         df_filtered = df.loc[df.index.isin(borrowers_set)]  
         
         # borrowers_metadata = df_filtered[['LC_Borrower', 'LC_TotalLoanAmount', 'LC_NumberOfLoans', 'LC_BorrowerFullAddressSet', 'LC_BorrowerFullAddressJsonSet', 'LC_LatestTransactionDate', 'LC_TotalNumberOfPropertyTransactions', '_id']].set_index('LC_Borrower').to_dict('index')
-        borrowers_metadata = df_filtered[['LC_TotalLoanAmount', 'LC_NumberOfLoans', 'LC_BorrowerFullAddressSet', 'LC_BorrowerFullAddressJsonSet', 'LC_LatestTransactionDate', 'LC_TotalNumberOfPropertyTransactions', '_id']].to_dict('index')
+        borrowers_metadata = df_filtered[['LC_TotalLoanAmount', 'LC_NumberOfLoans', 'LC_BorrowerFullAddressSet', 'LC_BorrowerFullAddressJsonSet', 'LC_LatestTransactionDate', 'LC_TotalNumberOfPropertyTransactions', '_id', 'ProjectId']].to_dict('index')
  
         borrower_dpid_counts = {}    
         for borrower, metadata in borrowers_metadata.items():    
@@ -120,7 +120,7 @@ with get_db_client() as client:
     
         borrowers_metadata_list = [{"LC_Borrower": k, **v} for k, v in borrowers_metadata.items()]  
     
-        res_list.append({"LC_ParentSponsor": LC_ParentSponsor, "LC_BorrowerMetaData": borrowers_metadata_list, "LC_FilterUsed": "MaxPropertyTransaction", "LC_DateOfParentCreation": datetime.now().strftime('%Y%m%d')})  
+        res_list.append({"LC_ParentSponsor": LC_ParentSponsor, "LC_BorrowerMetaData": borrowers_metadata_list, "LC_FilterUsed": "MaxPropertyTransaction", "LC_DateOfParentCreation": datetime.now().strftime('%Y%m%d'),"ProjectId": project_id })  
     
  
     print("Done creating list for final insertion")

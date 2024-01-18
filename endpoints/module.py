@@ -109,8 +109,6 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
             if filters.transaction_year.prefix == "greater_than_equal_to":
                 query_filter["LC_LatestTransactionDate"] = {
                     "$gte": filters.transaction_year.value}
-                
-        [{"FIPSCode": {"$in": filters.county_codes}}]
 
         # Setting property state/county filter
         if filters.states and len(filters.states) != 0:
