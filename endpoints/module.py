@@ -91,14 +91,14 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
                     "$gte": filters.amount.value}
 
         # Setting transaction count filter
-        # if filters.transaction_count and filters.transaction_count.value:
-        #     if filters.transaction_count.prefix == "less_than_equal_to":
-        #         query_filter["LC_NumberOfTransactions"] = {
-        #             "$lte": filters.transaction_count.value}
+        if filters.transaction_count and filters.transaction_count.value:
+            if filters.transaction_count.prefix == "less_than_equal_to":
+                query_filter["LC_NumberOfLoans"] = {
+                    "$lte": filters.transaction_count.value}
                 
-        #     if filters.transaction_count.prefix == "greater_than_equal_to":
-        #         query_filter["LC_NumberOfTransactions"] = {
-        #             "$gte": filters.transaction_count.value}
+            if filters.transaction_count.prefix == "greater_than_equal_to":
+                query_filter["LC_NumberOfLoans"] = {
+                    "$gte": filters.transaction_count.value}
         
         # Setting transaction year filter
         if filters.transaction_year and filters.transaction_year.value:
@@ -115,8 +115,7 @@ async def create_module(filters: TransactionFilters, module_name: str = Body(...
             if (filters.county_codes and len(filters.county_codes) > 0):
                 query_filter["$or"] = [{"FIPSCodeSet": {"$in": filters.county_codes}}]
             else:
-                query_filter["$or"] = [{f"PropertyState.{state}": {
-                    "$exists": True}} for state in filters.states]
+                query_filter["$or"] = [{"PropertyStateSet": {"$in": filters.states}}]
 
         # Setting property state/county filter
         # if filters.states and len(filters.states) != 0:

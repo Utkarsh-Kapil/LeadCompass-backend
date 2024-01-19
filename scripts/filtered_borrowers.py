@@ -45,6 +45,7 @@ pipeline = [
             "LC_TotalLoanAmount": {"$sum": "$LC_PartialLoanAmount"},
             "LC_NumberOfLoans": {"$sum": 1},
             "FIPSCodeSet": {"$addToSet": "$FIPSCode"},
+            "PropertyStateSet" : {"$addToSet":"$PropertyState"},
             "DPIDSet": {"$addToSet": "$DPID"},
             "LC_LatestTransactionDate": {"$max": "$OriginalDateOfContract"},
             "LC_Transactions": {
