@@ -67,7 +67,7 @@ async def update_collection_async(collection, ids, project_id):
         collection.update_many({"_id": {"$in": ids}}, {"$set": {"ProjectId": str(project_id)}})
 
     
-@router.post('/project', response_model=ProjectResponse, response_model_by_alias=False, response_description="Project added successfully", status_code=status.HTTP_201_CREATED)
+@router.post('/project', response_model_by_alias=False, response_description="Project added successfully", status_code=status.HTTP_201_CREATED)
 async def create_project(background_tasks: BackgroundTasks, file: UploadFile = File(None),
                          user: UserBaseSchema = Depends(get_current_user), project: ProjectSchema = None):
     try:
@@ -75,12 +75,18 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
         collection_sam = get_sam_collection()
         collection_deed = get_deed_collection()
         result_sam = []
+        result_deed = []
         sam_inserted_ids = []
         deed_inserted_ids = []
+        sam_transactions = []
+        deed_transactions = []
 
         try:
             if file.filename.endswith('.zip'):
                 response = await unzip_file(file)
+
+                if not response.get("is_valid"):
+                    return {"msg":"file_name should have either sam or deed"}
 
                 sam_response = response.get("data",{}).get("sam",{})
                 deed_response = response.get("data",{}).get("deed",{})
@@ -93,7 +99,7 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
                             sam_transactions = sam_response.get('data', [])
 
                         if not sam_transactions:
-                            return {"msg": "No Sam Transaction Provided in request"}
+                            return ProjectResponse(message = "No Sam Transaction Provided in request")
 
                         result_sam = collection_sam.insert_many(sam_transactions)
 
@@ -103,7 +109,7 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
                             deed_transactions = deed_response.get('data', [])
 
                         if not deed_transactions:
-                            return {"msg": "No Deed Transaction Provided in request"}
+                            return ProjectResponse(message = "No Deed Transaction Provided in request")
 
                         result_deed = collection_deed.insert_many(deed_transactions)
 
@@ -251,46 +257,51 @@ def convert_to_serializable(value):
 def convert_to_json_compliant(data):
     return json.dumps(data, default=convert_to_serializable)
 
-@router.post('/file/unzip')
-async def unzip_file(file: UploadFile = File(...)):
-    zip_file = file.file  # Access the underlying SpooledTemporaryFile
+# @router.post('/file/unzip')
+# async def unzip_file(file: UploadFile = File(...)):
+#     zip_file = file.file  # Access the underlying SpooledTemporaryFile
 
-    result_data = {}
+#     result_data = {}
 
-    with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-        for file_info in zip_ref.infolist():
-            if not file_info.is_dir():
-                file_name = file_info.filename
-                print(file_name)
-                content = zip_ref.read(file_name)
+#     with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+#         for file_info in zip_ref.infolist():
+#             if not file_info.is_dir():
+#                 file_name = file_info.filename
+#                 print(file_name)
+#                 content = zip_ref.read(file_name)
 
-                file_src = re.search(r"sam|deed", file_name)
-                if file_src:
-                    file_src = file_src.group()
-                else:
-                    file_src = "sam"
-                try:
-                    df = pd.read_csv(io.StringIO(content.decode("latin-1")))
-                    df = df.map(convert_to_serializable)
-                    df = df.fillna('')
-                    headers = df.columns.tolist()
+#                 file_src = re.search(r"sam|deed", file_name)
+#                 if file_src:
+#                     file_src = file_src.group()
+#                 else:
+#                     file_src = "sam"
+#                 try:
+#                     df = pd.read_csv(io.StringIO(content.decode("latin-1")))
+#                     df = df.map(convert_to_serializable)
+#                     df = df.fillna('')
+#                     headers = df.columns.tolist()
 
-                    if file_src not in result_data:
-                        result_data[file_src]= {
-                            "msg": f"CSV file '{file_info.filename}' received",
-                            "data": json.loads(convert_to_json_compliant(df.to_dict(orient='records'))),
-                            "headers": headers,
-                            "status_code": 200,                  
-                            "type": "csv",
-                            "file_name": file_info.filename
-                        }
+#                     if file_src not in result_data:
+#                         result_data[file_src]= {
+#                             "msg": f"CSV file '{file_info.filename}' received",
+#                             "data": json.loads(convert_to_json_compliant(df.to_dict(orient='records'))),
+#                             "headers": headers,
+#                             "status_code": 200,                  
+#                             "type": "csv",
+#                             "file_name": file_info.filename
+#                         }
+#                     else:
+#                         existing_entry = result_data[file_src]
+#                         if len(existing_entry["data"])==0:
+#                             existing_entry["data"] = json.loads(convert_to_json_compliant(df.to_dict(orient='records')))
+                    
                    
-                except ValueError:
-                    result_data["error"] = {
-                        "msg": f"CSV file '{file_info.filename}' contains out-of-range float values",
-                        "status_code": 400
-                    }
-    return {"msg": f"CSV file {file_info.filename}","data": result_data}
+#                 except ValueError:
+#                     result_data["error"] = {
+#                         "msg": f"CSV file '{file_info.filename}' contains out-of-range float values",
+#                         "status_code": 400
+#                     }
+#     return {"msg": f"CSV file {file_info.filename}","data": result_data}
     # response_content = jsonable_encoder(result_data)
     # return JSONResponse(content=response_content, media_type="application/json")
 

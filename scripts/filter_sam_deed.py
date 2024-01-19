@@ -46,7 +46,7 @@ filter = {
     "$and": [
         {"LC_TransactionDateValidForCompany": "Y"},
         {"LC_PropertyResidentialStatus": 1},
-        {"LC_CompanyTag1": {"$ne":0}},
+        {"LC_CompanyTag1": {"$ne":0},"LC_CompanyTag2": {"$ne":0}},
         {"ProjectId": project_id}
     ]
 }

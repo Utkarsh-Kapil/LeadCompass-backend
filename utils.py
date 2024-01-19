@@ -98,6 +98,7 @@ async def unzip_file(file: UploadFile = File(...)):
     zip_file = file.file 
 
     result_data = {}
+    is_valid = False
 
     with zipfile.ZipFile(zip_file, 'r') as zip_ref:
         for file_info in zip_ref.infolist():
@@ -109,8 +110,9 @@ async def unzip_file(file: UploadFile = File(...)):
                 file_src = re.search(r"sam|deed", file_name)
                 if file_src:
                     file_src = file_src.group()
-                else:
-                    return {"msg": "file_name should have either sam or deed"}
+                    # print(f"uk_debug3_{file_src}")
+                elif file_src != "sam" or file_src != "deed":
+                    continue
                 
                 try:
                     df = pd.read_csv(io.StringIO(content.decode("latin-1")))
@@ -127,12 +129,20 @@ async def unzip_file(file: UploadFile = File(...)):
                             "type": "csv",
                             "file_name": file_info.filename
                         }
-                   
+                    else:
+                        existing_entry = result_data[file_src]
+                        if len(existing_entry["data"])==0:
+                            existing_entry["data"] = json.loads(convert_to_json_compliant(df.to_dict(orient='records')))
+                    
+                    is_valid = True
+
                 except ValueError:
                     result_data["error"] = {
                         "msg": f"CSV file '{file_info.filename}' contains out-of-range float values",
                         "status_code": 400
-                    }
-    return {"msg": f"CSV file {file_info.filename}","data": result_data}
-    # response_content = jsonable_encoder(result_data)
-    # return JSONResponse(content=response_content, media_type="application/json")
+              }
+                    
+    if not is_valid: 
+        return {"msg": "file_name should have either sam or deed","is_valid":False}   
+    return {"msg": f"CSV file {file_info.filename}","data": result_data,"is_valid":True}
+    
