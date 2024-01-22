@@ -96,7 +96,7 @@ def convert_to_json_compliant(data):
 
 async def unzip_file(file: UploadFile = File(...)):
     zip_file = file.file 
-
+    uploaded_file = set()
     result_data = {}
     is_valid = False
 
@@ -114,6 +114,7 @@ async def unzip_file(file: UploadFile = File(...)):
                 elif file_src != "sam" or file_src != "deed":
                     continue
                 
+                uploaded_file.add(file_src)
                 try:
                     df = pd.read_csv(io.StringIO(content.decode("latin-1")))
                     df = df.map(convert_to_serializable)
@@ -144,5 +145,5 @@ async def unzip_file(file: UploadFile = File(...)):
                     
     if not is_valid: 
         return {"msg": "file_name should have either sam or deed","is_valid":False}   
-    return {"msg": f"CSV file {file_info.filename}","data": result_data,"is_valid":True}
+    return {"msg": f"CSV file {file_info.filename}","data": result_data,"is_valid":True,"uploaded_file":list(uploaded_file)}
     

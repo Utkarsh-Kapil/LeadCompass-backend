@@ -86,7 +86,9 @@ async def create_project(background_tasks: BackgroundTasks, file: UploadFile = F
                 response = await unzip_file(file)
 
                 if not response.get("is_valid"):
-                    return {"msg":"file_name should have either sam or deed"}
+                    return {"msg":"There is no file of sam or deed"}
+                
+                # uploaded_files = response.get("uploaded_files",[])
 
                 sam_response = response.get("data",{}).get("sam",{})
                 deed_response = response.get("data",{}).get("deed",{})
