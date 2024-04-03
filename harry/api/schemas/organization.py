@@ -9,13 +9,17 @@ from pydantic.functional_validators import BeforeValidator
 # It will be represented as a `str` on the model so that it can be serialized to JSON.
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
+
+
+class Contact(BaseModel):
+    value: str
+    type: str
 class DecisionMaker(BaseModel):
     name: str
     title: str
-    email: str
     linkedin: str
-    phone: str
-
+    contact: Optional[List[Contact]]
+    emails: Optional[List[Contact]]
 
 class OrganizationSchema(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)

@@ -30,6 +30,12 @@ def get_people_collection():
     organization_collection = db["people"]
     return organization_collection
 
+def get_contact_collection():
+    client = MongoClient(mongo_url)
+    db = client["harry"]
+    organization_collection = db["contact"]
+    return organization_collection
+
 def get_user_collection():
     client = MongoClient(mongo_url)
     db = client["harry"]
@@ -42,6 +48,7 @@ async def create_organization(organization: AddOrganizationSchema = None):
         collection_organization = get_organization_collection()
         collection_people = get_people_collection()
         collection_user = get_user_collection()
+        collection_contact = get_contact_collection()
         user = collection_user.find_one({"email": organization.user_email})
         existing_organization = collection_organization.find_one({"name": organization.name})
 
@@ -70,13 +77,33 @@ async def create_organization(organization: AddOrganizationSchema = None):
                 "organization_id": result_organization.inserted_id,
                 "name": decision_maker.name,
                 "title": decision_maker.title,
-                "email": decision_maker.email,
                 "linkedin": decision_maker.linkedin,
-                "phone": decision_maker.phone,
                 "created_at": datetime.now(),
                 "last_modified": datetime.now()
             }
-            collection_people.insert_one(new_decision_maker)
+            result_people= collection_people.insert_one(new_decision_maker)
+            if decision_maker.contact:
+                for phone in decision_maker.contact:
+                    new_contact = {
+                        "user_id": user["_id"],
+                        "people_id": result_people.inserted_id,
+                        "value": phone.value,
+                        "type": "phone",
+                        "created_at": datetime.now(),
+                        "last_modified": datetime.now()
+                    }
+                    collection_contact.insert_one(new_contact)
+            if decision_maker.emails:
+                for email in decision_maker.emails:
+                    new_contact = {
+                        "user_id": user["_id"],
+                        "people_id": result_people.inserted_id,
+                        "value": email.value,
+                        "type": "email",
+                        "created_at": datetime.now(),
+                        "last_modified": datetime.now()
+                    }
+                    collection_contact.insert_one(new_contact)
 
         return OrganizationResponse(message = "organization added successfully",result=new_organization, total=1)
 

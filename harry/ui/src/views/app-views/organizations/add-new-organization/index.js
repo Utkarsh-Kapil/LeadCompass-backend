@@ -1,8 +1,8 @@
 import React, { useState,useEffect } from "react";
-import { Card, Form, Input, Button, Row, Col, message } from "antd";
+import { Card, Form, Input, Button, Row, Col, message,Space } from "antd";
 import { useNavigate,useParams, useLocation } from "react-router-dom";
 // import { useQueryClient } from "react-query";
-import { GlobalOutlined , PhoneOutlined , TeamOutlined, UserAddOutlined,MinusCircleOutlined } from "@ant-design/icons";
+import { GlobalOutlined , PhoneOutlined , TeamOutlined, UserAddOutlined,MinusCircleOutlined,PlusOutlined } from "@ant-design/icons";
 // import { useMutation } from "react-query";
 // import { useOrganization } from "context/organization-context";
 // import { useUser } from "context/user-context";
@@ -36,7 +36,7 @@ const fetchOldData = async (id) => {
     values['user_email'] = localStorage.getItem("email");
     if (values['decisionMakers']==undefined||values['decisionMakers']==null){ 
       values['decisionMakers'] = [];
-    }
+    } 
     let response =  await ApiService.harryBackendApi(`organization`,"post",null,values);
     alert("Organization added successfully");
     navigate("/app/organizations");
@@ -255,19 +255,43 @@ const fetchOldData = async (id) => {
                 >
                   <Input placeholder="Please enter title" />
                 </Form.Item>
-                <Form.Item
-                  {...field}
-                  name={[field.name, 'email']}
-                  label="Email"
-                  rules={[
-                    {
-                      required: false,
-                      message: "Please enter email",
-                    },
-                  ]}
-                >
-                  <Input placeholder="Please enter email" />
-                </Form.Item>
+                <Form.List name={[field.name, 'emails']}>
+  {(emailFields, { add: addEmail, remove: removeEmail }) => (
+    <>
+      {emailFields.map((emailField, emailIndex) => (
+        <Space key={emailField.key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+          <Form.Item
+            {...emailField}
+            name={[emailField.name, 'value']}
+            label={`Email ${emailIndex + 1}`}
+            rules={[
+              {
+                required: true,
+                message: "Please enter email",
+              },
+            ]}
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            {...emailField}
+            name={[emailField.name, 'type']}
+            initialValue="email"
+            hidden
+          >
+            <Input />
+          </Form.Item>
+          <MinusCircleOutlined onClick={() => removeEmail(emailIndex)} />
+        </Space>
+      ))}
+      <Form.Item>
+        <Button type="dashed" onClick={() => addEmail()} block icon={<PlusOutlined />}>
+          Add Email
+          </Button>
+      </Form.Item>
+    </>
+  )}
+</Form.List>
                 <Form.Item
                   {...field}
                   name={[field.name, 'linkedin']}
@@ -281,19 +305,42 @@ const fetchOldData = async (id) => {
                 >
                   <Input placeholder="Please enter LinkedIn" />
                 </Form.Item>
-                <Form.Item
-                  {...field}
-                  name={[field.name, 'phone']}
-                  label="Phone"
-                  rules={[
-                    {
-                      required: false,
-                      message: "Please enter phone",
-                    },
-                  ]}
-                >
-                  <Input placeholder="Please enter phone" />
-                </Form.Item>
+                <Form.List name={[field.name, 'contact']}>
+  {(phoneFields, { add: addPhone, remove: removePhone }) => (
+    <>
+      {phoneFields.map((phoneField, phoneIndex) => (
+        <Space key={phoneField.key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+          <Form.Item
+            {...phoneField}
+            name={[phoneField.name, 'value']}
+            label={`Phone ${phoneIndex + 1}`}
+            rules={[
+              {
+                required: true,
+                message: "Please enter email",
+              },
+            ]}
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            {...phoneField}
+            name={[phoneField.name, 'type']}
+            initialValue="phone"
+            hidden
+          >
+            <Input />
+          </Form.Item>
+          <MinusCircleOutlined onClick={() => removePhone(phoneIndex)} />
+        </Space>
+      ))}
+      <Form.Item>
+        <Button type="dashed" onClick={() => addPhone()} block icon={<PlusOutlined />}>
+          </Button>
+      </Form.Item>
+    </>
+  )}
+</Form.List>
               </Col>
             </Row>
             </Card>
